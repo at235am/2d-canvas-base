@@ -15,4 +15,4 @@ export const KEYS = {
   f: DIRECTIONS.right,
 };
 
-export const STEP = 1;
+export const STEP = 0.4;

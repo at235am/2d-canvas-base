@@ -75,9 +75,9 @@ const App = () => {
     moving: false,
     // hitboxX & hitboxY represent OFFSETS relative to x, y
     hitboxX: TILE_SIZE / 2 - 24,
-    hitboxY: TILE_SIZE / 2 - 15,
+    hitboxY: TILE_SIZE / 2 - 12,
     hitboxWidth: 48,
-    hitboxHeight: 71,
+    hitboxHeight: 68,
 
     // sprite animation frame
     spriteFrameX: 0,
@@ -194,10 +194,24 @@ const App = () => {
     return { collided, position: collided ? prev : next };
   };
 
-  const moveUp = (player) => ({ ...player, y: player.y - STEP });
-  const moveLeft = (player) => ({ ...player, x: player.x - STEP });
-  const moveDown = (player) => ({ ...player, y: player.y + STEP });
-  const moveRight = (player) => ({ ...player, x: player.x + STEP });
+  const step = () => STEP * (now.current - then.current);
+
+  const moveUp = (player) => ({
+    ...player,
+    y: player.y - step(),
+  });
+  const moveLeft = (player) => ({
+    ...player,
+    x: player.x - step(),
+  });
+  const moveDown = (player) => ({
+    ...player,
+    y: player.y + step(),
+  });
+  const moveRight = (player) => ({
+    ...player,
+    x: player.x + step(),
+  });
 
   const move = () => {
     const createNewPlayerState = (handleMovement = () => {}) => {
@@ -230,6 +244,9 @@ const App = () => {
         moving: false,
         spriteFrameX: 0, // reset frame sprite back to its origin position
       };
+
+    const timeInSeconds = now.current * 0.001;
+    const elapsedTimeInSeconds = timeInSeconds - then.current * 0.001;
   };
 
   const advanceSpriteAnimation = () => {
@@ -294,13 +311,13 @@ const App = () => {
     // ctx.fillRect(player.x, player.y, player.width, player.height);
 
     // draw player hitbox:
-    // ctx.fillStyle = "red";
-    // ctx.fillRect(
-    //   player.x + player.hitboxX,
-    //   player.y + player.hitboxY,
-    //   player.hitboxWidth,
-    //   player.hitboxHeight
-    // );
+    ctx.fillStyle = "red";
+    ctx.fillRect(
+      player.x + player.hitboxX,
+      player.y + player.hitboxY,
+      player.hitboxWidth,
+      player.hitboxHeight
+    );
 
     // draw sprite unchanged:
     // ctx.drawImage(
@@ -323,12 +340,6 @@ const App = () => {
       cropHeight,
       ...destinationData
     );
-
-    // console.log(player.spriteImg > 2 ? 0 : player.spriteImg++);
-    // playerData.current = {
-    //   ...player,
-    //   spriteFrame: player.spriteFrame++,
-    // };
   };
 
   /////////////////////////////////////////////////////////////////////////////
@@ -341,10 +352,12 @@ const App = () => {
   };
 
   const advance = (time) => {
+    now.current = time;
+
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d");
 
-    const timePassed = (time - prevFrame.current) / 1000;
+    const timePassed = (now.current - then.current) / 1000;
     fps.current = Math.round(1 / timePassed); // current fps
 
     update();
@@ -359,15 +372,15 @@ const App = () => {
     drawFps(ctx, canvas);
     drawPlayerState(ctx, canvas);
 
+    // update time:
+    then.current = now.current;
+
     // update frame references:
-    prevFrame.current = time;
+    prevFrame.current = nextFrame.current;
     nextFrame.current = requestAnimationFrame(advance);
   };
 
   useEffect(() => {
-    // const ctx = canvasRef.current.getContext("2d");
-    // ctx.imageSmoothingEnabled = false;
-
     // load imgs here:
     playerData.current.spriteImg.src = playerSprite;
 
