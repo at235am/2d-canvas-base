@@ -18,12 +18,17 @@ import Character from "./components/Character";
 import Map from "./components/Map";
 
 import { useKeyMovement } from "./hooks/useKeyPress";
+import useWindowSize from "./hooks/useWindowSize";
+import useSound from "use-sound";
 
+import wallHit from "./assets/sounds/wall-hit.wav";
 // import { timeHours, timer } from "d3";
 
 import { DEFAULT_MAP } from "./maps/default-map";
 
-import { TILE_SIZE } from "./game-values/default-values";
+import { TILE_SIZE, STEP } from "./game-values/default-values";
+
+import playerSprite from "./assets/demorpgcharacter.png";
 
 const GameContainer = styled.div`
   position: relative;
@@ -34,56 +39,44 @@ const GameContainer = styled.div`
   display: flex;
   justify-content: center;
   align-items: center;
-`;
 
-const FpsCounter = styled.div`
-  z-index: 200;
-  position: absolute;
-  top: 0;
-  left: 0;
-  margin: 1rem;
-
-  background-color: white;
-  padding: 0.5rem 1rem;
-
-  span {
-    font-weight: bold;
-
-    color: ${({ fps }) => (fps > 60 ? "MediumSeaGreen" : "red")};
+  canvas {
+    width: 100%;
+    height: 100%;
+    image-rendering: pixelated;
   }
 `;
 
-const STEP = 5;
-
 const App = () => {
-  const [mapTranslation, setMapTranslation] = useState({ x: 0, y: 0 });
   const [mapData, setMapData] = useState(DEFAULT_MAP);
+  const { windowWidth, windowHeight } = useWindowSize();
 
-  const charPos = useRef();
-  const mapPos = useRef();
-  const solidTiles = useRef([]);
+  const canvasRef = useRef();
+  const nextFrame = useRef();
+  const prevFrame = useRef();
+  const fps = useRef(0);
 
-  const requestRef = useRef();
-  const previousTimeRef = useRef();
-  const [fps, setFps] = useState(0);
-
+  // game state:
   const directionsHeld = useKeyMovement();
-
-  const [playerData, setPlayerData] = useState({
-    mapPosition: { x: 0, y: 0 },
+  const solidTiles = useRef();
+  const playerData = useRef({
+    x: 0,
+    y: 0,
+    width: TILE_SIZE,
+    height: TILE_SIZE,
     collided: false,
-    facing: "down",
-    direction: "down",
-    moving: false,
+    hitboxX: TILE_SIZE / 2 - 24, // player.width / 2 - c
+    hitboxY: TILE_SIZE / 2 - 15,
+    hitboxWidth: 48,
+    hitboxHeight: 71,
   });
 
-  useEffect(() => {
-    requestRef.current = requestAnimationFrame(move);
-    return () => cancelAnimationFrame(requestRef.current);
-  }, []);
+  // various:
+  const [playWallHit] = useSound(wallHit, { volume: 0.15 });
+  const playerSpriteImage = new Image();
 
   useEffect(() => {
-    console.log("finding collision tiles");
+    console.log("Finding collision tiles");
     const newSolidTiles = mapData
       .map((row, y) =>
         row
@@ -105,139 +98,217 @@ const App = () => {
     solidTiles.current = newSolidTiles;
   }, [mapData]);
 
-  const moveUp = (position) => ({ ...position, y: position.y - STEP });
-  const moveLeft = (position) => ({ ...position, x: position.x - STEP });
-  const moveDown = (position) => ({ ...position, y: position.y + STEP });
-  const moveRight = (position) => ({ ...position, x: position.x + STEP });
+  const clamp = (value, min, max) => {
+    return Math.min(Math.max(value, min), max);
+  };
 
+  // const clamp = (value, min, max) => {
+  //   if (value < min) return min;
+  //   else if (value > max) return max;
+  //   return value;
+  // };
+
+  /////////////////////////////////////////////////////////////////////////////
+  // CAMERA CONTROLS
+  /////////////////////////////////////////////////////////////////////////////
+  const panCam = (ctx, canvas) => {
+    ctx.setTransform(1, 0, 0, 1, 0, 0); // reset the transform matrix as it is cumulative
+    ctx.clearRect(0, 0, canvas.width, canvas.height); // clear the viewport AFTER the matrix is reset
+
+    // Clamp the camera position to the world bounds while centering the camera around the player
+    const map = {
+      minX: 0,
+      maxX: mapData[0].length * TILE_SIZE,
+      minY: 0,
+      maxY: mapData.length * TILE_SIZE,
+    };
+
+    const player = { ...playerData.current };
+
+    const camX = clamp(
+      -player.x + canvas.width / 2,
+      -(map.maxX - canvas.width),
+      map.minX
+    );
+    const camY = clamp(
+      -player.y + canvas.height / 2,
+      -(map.maxY - canvas.height),
+      map.minY
+    );
+
+    // console.log("cam", camX, camY);
+    ctx.translate(camX, camY);
+  };
+
+  const resetCam = (ctx) => {
+    ctx.setTransform(1, 0, 0, 1, 0, 0); // reset the transform matrix as it is cumulative
+  };
+
+  /////////////////////////////////////////////////////////////////////////////
+  // MOVEMENT
+  /////////////////////////////////////////////////////////////////////////////
   const validateStep = (prev, next) => {
-    // console.log("---------------------------------");
-    // console.log("validateStep mapPos", mapPos);
-    // console.log("validateStep charPos", charPos);
-    // console.log("validateStep prev", prev);
-    // console.log("validateStep next", next);
-
-    // finding the change between next and prev (should always be the STEP)
+    // finding the change between next and prev (should always be + or - STEP)
     const deltaX = next.x - prev.x;
     const deltaY = next.y - prev.y;
-
-    // mapRectPos represents the current map position BEFORE any changes:
-    const mapRectPos = mapPos.current.getBoundingClientRect();
-    const charRectPos = charPos.current.getBoundingClientRect();
-
-    const futurePlayerPos = {
-      width: charRectPos.width,
-      height: charRectPos.height,
-      x: charRectPos.x + deltaX,
-      y: charRectPos.y + deltaY,
+    const player = {
+      ...playerData.current,
+      x: playerData.current.x + deltaX,
+      y: playerData.current.y + deltaY,
     };
-    // console.log("current char pos", charRectPos);
-    // console.log("future char pso", futurePlayerPos);
 
-    // add on the deltas to get the future map position:
-    // const mapOffsetX = mapRectPos.x + deltaX;
-    // const mapOffsetY = mapRectPos.y + deltaY;
-
-    // console.log("tiles", solidTiles.current);
-
-    // use the future offsets to get actual positions to check for collsions:
-
-    const collided = solidTiles.current.some((tile) => {
-      tile = { ...tile, x: tile.x + mapRectPos.x, y: tile.y + mapRectPos.y };
-      // console.log("collide tile", tile);
+    // checking for tiles that can't be moved throuhg:
+    const tileCollision = solidTiles.current.some((tile) => {
       return (
-        tile.x < futurePlayerPos.x + futurePlayerPos.width &&
-        tile.x + tile.width > futurePlayerPos.x &&
-        tile.y < futurePlayerPos.y + futurePlayerPos.height &&
-        tile.y + tile.height > futurePlayerPos.y
+        tile.x < player.x + player.width &&
+        tile.x + tile.width > player.x &&
+        tile.y < player.y + player.height &&
+        tile.y + tile.height > player.y
       );
     });
 
-    // console.log("play", playWallHit);
-    // if (collided) playWallHit();
+    const mapWidth = mapData[0].length * TILE_SIZE;
+    const mapHeight = mapData.length * TILE_SIZE;
+    const boundaryCollision =
+      player.x < 0 ||
+      player.y < 0 ||
+      player.x > mapWidth - player.width ||
+      player.y > mapHeight - player.height;
 
-    // setCollided(collided);
-    // setCharMoving(!collided);
-    // console.log("collided", collided);
-    // console.log("---------------------------------");
-
-    return {
-      newMapPosition: collided ? prev : next,
-      collided: collided,
-    };
-
-    // if (collided) return {newprev};
-    // else return {next};
+    const collided = tileCollision || boundaryCollision;
+    return { collided, position: collided ? prev : next };
   };
 
-  const move = (time) => {
-    const secondsPassed = (time - previousTimeRef.current) / 1000;
-    const currentFps = Math.round(1 / secondsPassed);
+  const moveUp = (player) => ({ ...player, y: player.y - STEP });
+  const moveLeft = (player) => ({ ...player, x: player.x - STEP });
+  const moveDown = (player) => ({ ...player, y: player.y + STEP });
+  const moveRight = (player) => ({ ...player, x: player.x + STEP });
 
-    setFps(currentFps);
+  const move = () => {
+    const createNewPlayerState = (handleMovement = () => {}) => {
+      const player = playerData.current;
+      const { collided, position } = validateStep(
+        player,
+        handleMovement(player)
+      );
+      return {
+        ...player,
+        collided,
+        x: position.x,
+        y: position.y,
+      };
+    };
 
     const heldDirection = directionsHeld.current[0];
-
-    const _setPlayerData = (directionFunction) => {
-      setPlayerData((prev) => {
-        const { newMapPosition, collided } = validateStep(
-          prev.mapPosition,
-          directionFunction(prev.mapPosition)
-        );
-        return {
-          ...prev,
-          direction: directionsHeld.current[0],
-          moving: heldDirection ? true : false,
-          mapPosition: newMapPosition,
-          collided: collided,
-        };
+    if (heldDirection === DIRECTIONS.up)
+      playerData.current = createNewPlayerState(moveUp);
+    else if (heldDirection === DIRECTIONS.left)
+      playerData.current = createNewPlayerState(moveLeft);
+    else if (heldDirection === DIRECTIONS.down)
+      playerData.current = createNewPlayerState(moveDown);
+    else if (heldDirection === DIRECTIONS.right)
+      playerData.current = createNewPlayerState(moveRight);
+  };
+  /////////////////////////////////////////////////////////////////////////////
+  // DRAWING:
+  /////////////////////////////////////////////////////////////////////////////
+  const drawMap = (ctx, canvas) => {
+    mapData.forEach((row, y) => {
+      row.forEach((tile, x) => {
+        ctx.fillStyle = tile.color;
+        ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
       });
-    };
-
-    if (heldDirection === DIRECTIONS.up) _setPlayerData(moveUp);
-    else if (heldDirection === DIRECTIONS.left) _setPlayerData(moveLeft);
-    else if (heldDirection === DIRECTIONS.down) _setPlayerData(moveDown);
-    else if (heldDirection === DIRECTIONS.right) _setPlayerData(moveRight);
-    else
-      setPlayerData((prev) => ({
-        ...prev,
-        moving: false,
-        facing: prev.direction,
-      }));
-
-    previousTimeRef.current = time;
-    requestRef.current = requestAnimationFrame(move);
+    });
   };
 
+  const drawFps = (ctx, canvas) => {
+    ctx.font = "30px Arial";
+    ctx.fillStyle = fps.current > 60 ? "green" : "red";
+    ctx.fillText(fps.current, 10, 30);
+  };
+
+  const drawPlayer = (ctx, canvas) => {
+    const player = playerData.current;
+    ctx.imageSmoothingEnabled = false; // pixelizes images for scaling purposes:
+
+    if (player.collided) ctx.fillStyle = "red";
+    else ctx.fillStyle = "transparent";
+
+    // console.log(
+    //   player.hitboxX,
+    //   player.hitboxY,
+    //   player.hitboxWidth,
+    //   player.hitboxHeight
+    // );
+
+    ctx.fillStyle = "red";
+    ctx.fillRect(
+      player.hitboxX,
+      player.hitboxY,
+      player.hitboxWidth,
+      player.hitboxHeight
+    );
+
+    ctx.drawImage(
+      playerSpriteImage,
+      0,
+      0,
+      player.width / 4,
+      player.height / 4,
+      player.x,
+      player.y,
+      player.width,
+      player.height
+    );
+  };
+
+  /////////////////////////////////////////////////////////////////////////////
+  // ENCAPSULATOR:
+  /////////////////////////////////////////////////////////////////////////////
+  const update = () => {
+    move();
+  };
+
+  const advance = (time) => {
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+
+    const timePassed = (time - prevFrame.current) / 1000;
+    fps.current = Math.round(1 / timePassed); // current fps
+
+    update();
+
+    // drawings at depend on the camera panning go here:
+    panCam(ctx, canvas);
+    drawMap(ctx, canvas);
+    drawPlayer(ctx, canvas);
+
+    // absolutely positioned drawings must be called after resetCam();
+    resetCam(ctx);
+    drawFps(ctx, canvas);
+
+    // update frame references:
+    prevFrame.current = time;
+    nextFrame.current = requestAnimationFrame(advance);
+  };
+
+  useEffect(() => {
+    // const ctx = canvasRef.current.getContext("2d");
+    // ctx.imageSmoothingEnabled = false;
+
+    playerSpriteImage.src = playerSprite;
+
+    nextFrame.current = requestAnimationFrame(advance);
+    return () => cancelAnimationFrame(nextFrame.current);
+  }, []);
+
   return (
-    <GameContainer
-      onClick={() => {
-        console.log("----------------------------------");
-        console.log("CHAR POS", charPos.current.getBoundingClientRect());
-        console.log("MAP POS", mapPos.current.getBoundingClientRect());
-        console.log("MAP TRANSLATION", mapTranslation);
-        console.log("APP moving", directionsHeld.length !== 0);
-        // console.log("APP charMoving", charMoving);
-        console.log("APP directionsHeld", directionsHeld);
-        console.log("----------------------------------");
-      }}
-    >
-      <FpsCounter fps={fps}>
-        FPS: <span>{fps}</span>
-      </FpsCounter>
-      <Camera>
-        <Map ref={mapPos} mapData={mapData} translate={mapTranslation}>
-          <Character
-            ref={charPos}
-            data={playerData}
-            // collided={collided}
-            // facing={lastDirection}
-            // moving={charMoving}
-            // direction={directionsHeld[0]}
-            // mapPosition={playerTranslation}
-          />
-        </Map>
-      </Camera>
+    <GameContainer onClick={() => {}}>
+      <canvas
+        ref={canvasRef}
+        width={windowWidth}
+        height={windowHeight}
+      ></canvas>
     </GameContainer>
   );
 };

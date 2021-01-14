@@ -14,3 +14,5 @@ export const KEYS = {
   d: DIRECTIONS.down,
   f: DIRECTIONS.right,
 };
+
+export const STEP = 1;
