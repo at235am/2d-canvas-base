@@ -60,15 +60,20 @@ const App = () => {
   const directionsHeld = useKeyMovement();
   const solidTiles = useRef();
   const playerData = useRef({
+    spriteImg: new Image(),
     x: 0,
     y: 0,
     width: TILE_SIZE,
     height: TILE_SIZE,
     collided: false,
-    hitboxX: TILE_SIZE / 2 - 24, // player.width / 2 - c
+    // hitboxX & hitboxY represent OFFSETS relative to x, y
+    hitboxX: TILE_SIZE / 2 - 24,
     hitboxY: TILE_SIZE / 2 - 15,
     hitboxWidth: 48,
     hitboxHeight: 71,
+
+    // sprite animation frame
+    spriteFrame: 1,
   });
 
   // various:
@@ -153,8 +158,10 @@ const App = () => {
     const deltaY = next.y - prev.y;
     const player = {
       ...playerData.current,
-      x: playerData.current.x + deltaX,
-      y: playerData.current.y + deltaY,
+      x: playerData.current.x + playerData.current.hitboxX + deltaX,
+      y: playerData.current.y + playerData.current.hitboxY + deltaY,
+      width: playerData.current.hitboxWidth,
+      height: playerData.current.hitboxHeight,
     };
 
     // checking for tiles that can't be moved throuhg:
@@ -209,6 +216,14 @@ const App = () => {
     else if (heldDirection === DIRECTIONS.right)
       playerData.current = createNewPlayerState(moveRight);
   };
+
+  const advanceSpriteAnimation = () => {
+    playerData.current = {
+      ...playerData.current,
+      spriteFrame: (playerData.current.spriteFrame + 1) % 4,
+    };
+  };
+
   /////////////////////////////////////////////////////////////////////////////
   // DRAWING:
   /////////////////////////////////////////////////////////////////////////////
@@ -224,7 +239,22 @@ const App = () => {
   const drawFps = (ctx, canvas) => {
     ctx.font = "30px Arial";
     ctx.fillStyle = fps.current > 60 ? "green" : "red";
-    ctx.fillText(fps.current, 10, 30);
+
+    const paintX = canvas.width - 60;
+
+    ctx.fillText(fps.current, paintX, 30);
+  };
+
+  const drawPlayerState = (ctx, canvas) => {
+    ctx.font = "30px Arial";
+    ctx.fillStyle = "green";
+
+    const player = playerData.current;
+    const dataKeys = Object.keys(player);
+
+    dataKeys.forEach((item, i) =>
+      ctx.fillText(`${item}: ${player[item]}`, 10, 30 * (i + 1))
+    );
   };
 
   const drawPlayer = (ctx, canvas) => {
@@ -234,32 +264,46 @@ const App = () => {
     if (player.collided) ctx.fillStyle = "red";
     else ctx.fillStyle = "transparent";
 
-    // console.log(
-    //   player.hitboxX,
-    //   player.hitboxY,
-    //   player.hitboxWidth,
-    //   player.hitboxHeight
-    // );
+    // draw player position:
+    ctx.fillStyle = "pink";
+    ctx.fillRect(player.x, player.y, player.width, player.height);
 
+    // draw player hitbox:
     ctx.fillStyle = "red";
     ctx.fillRect(
-      player.hitboxX,
-      player.hitboxY,
+      player.x + player.hitboxX,
+      player.y + player.hitboxY,
       player.hitboxWidth,
       player.hitboxHeight
     );
 
+    // draw sprite unchanged:
     ctx.drawImage(
-      playerSpriteImage,
-      0,
-      0,
-      player.width / 4,
-      player.height / 4,
-      player.x,
-      player.y,
-      player.width,
-      player.height
+      player.spriteImg,
+      player.x + player.width,
+      player.y + player.height
     );
+
+    const destinationData = [player.x, player.y, player.width, player.height];
+
+    const cropWidth = player.width / 4;
+    const cropHeight = player.height / 4;
+
+    // draw player sprite:
+    ctx.drawImage(
+      player.spriteImg,
+      player.spriteFrame * cropWidth,
+      0,
+      cropWidth,
+      cropHeight,
+      ...destinationData
+    );
+
+    // console.log(player.spriteImg > 2 ? 0 : player.spriteImg++);
+    // playerData.current = {
+    //   ...player,
+    //   spriteFrame: player.spriteFrame++,
+    // };
   };
 
   /////////////////////////////////////////////////////////////////////////////
@@ -267,6 +311,7 @@ const App = () => {
   /////////////////////////////////////////////////////////////////////////////
   const update = () => {
     move();
+    advanceSpriteAnimation();
   };
 
   const advance = (time) => {
@@ -286,6 +331,7 @@ const App = () => {
     // absolutely positioned drawings must be called after resetCam();
     resetCam(ctx);
     drawFps(ctx, canvas);
+    drawPlayerState(ctx, canvas);
 
     // update frame references:
     prevFrame.current = time;
@@ -296,7 +342,8 @@ const App = () => {
     // const ctx = canvasRef.current.getContext("2d");
     // ctx.imageSmoothingEnabled = false;
 
-    playerSpriteImage.src = playerSprite;
+    // load imgs here:
+    playerData.current.spriteImg.src = playerSprite;
 
     nextFrame.current = requestAnimationFrame(advance);
     return () => cancelAnimationFrame(nextFrame.current);
