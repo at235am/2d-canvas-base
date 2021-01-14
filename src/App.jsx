@@ -56,6 +56,12 @@ const App = () => {
   const prevFrame = useRef();
   const fps = useRef(0);
 
+  const fpsInterval = useRef(0);
+  const startTime = useRef(0);
+  const now = useRef(0);
+  const then = useRef(0);
+  const elapsed = useRef(0);
+
   // game state:
   const directionsHeld = useKeyMovement();
   const solidTiles = useRef();
@@ -66,6 +72,7 @@ const App = () => {
     width: TILE_SIZE,
     height: TILE_SIZE,
     collided: false,
+    moving: false,
     // hitboxX & hitboxY represent OFFSETS relative to x, y
     hitboxX: TILE_SIZE / 2 - 24,
     hitboxY: TILE_SIZE / 2 - 15,
@@ -73,7 +80,8 @@ const App = () => {
     hitboxHeight: 71,
 
     // sprite animation frame
-    spriteFrame: 1,
+    spriteFrameX: 0,
+    spriteFrameY: 0,
   });
 
   // various:
@@ -201,6 +209,7 @@ const App = () => {
       return {
         ...player,
         collided,
+        moving: true,
         x: position.x,
         y: position.y,
       };
@@ -215,13 +224,29 @@ const App = () => {
       playerData.current = createNewPlayerState(moveDown);
     else if (heldDirection === DIRECTIONS.right)
       playerData.current = createNewPlayerState(moveRight);
+    else
+      playerData.current = {
+        ...playerData.current,
+        moving: false,
+        spriteFrameX: 0, // reset frame sprite back to its origin position
+      };
   };
 
   const advanceSpriteAnimation = () => {
-    playerData.current = {
-      ...playerData.current,
-      spriteFrame: (playerData.current.spriteFrame + 1) % 4,
+    const heldDirection = directionsHeld.current[0] || ""; // "" is to avoid undefined key
+
+    const directionFrame = {
+      [DIRECTIONS.down]: 0,
+      [DIRECTIONS.right]: 1,
+      [DIRECTIONS.up]: 2,
+      [DIRECTIONS.left]: 3,
     };
+    if (playerData.current.moving)
+      playerData.current = {
+        ...playerData.current,
+        spriteFrameX: (playerData.current.spriteFrameX + 1) % 4,
+        spriteFrameY: directionFrame[heldDirection],
+      };
   };
 
   /////////////////////////////////////////////////////////////////////////////
@@ -265,24 +290,24 @@ const App = () => {
     else ctx.fillStyle = "transparent";
 
     // draw player position:
-    ctx.fillStyle = "pink";
-    ctx.fillRect(player.x, player.y, player.width, player.height);
+    // ctx.fillStyle = "pink";
+    // ctx.fillRect(player.x, player.y, player.width, player.height);
 
     // draw player hitbox:
-    ctx.fillStyle = "red";
-    ctx.fillRect(
-      player.x + player.hitboxX,
-      player.y + player.hitboxY,
-      player.hitboxWidth,
-      player.hitboxHeight
-    );
+    // ctx.fillStyle = "red";
+    // ctx.fillRect(
+    //   player.x + player.hitboxX,
+    //   player.y + player.hitboxY,
+    //   player.hitboxWidth,
+    //   player.hitboxHeight
+    // );
 
     // draw sprite unchanged:
-    ctx.drawImage(
-      player.spriteImg,
-      player.x + player.width,
-      player.y + player.height
-    );
+    // ctx.drawImage(
+    //   player.spriteImg,
+    //   player.x + player.width,
+    //   player.y + player.height
+    // );
 
     const destinationData = [player.x, player.y, player.width, player.height];
 
@@ -292,8 +317,8 @@ const App = () => {
     // draw player sprite:
     ctx.drawImage(
       player.spriteImg,
-      player.spriteFrame * cropWidth,
-      0,
+      player.spriteFrameX * cropWidth,
+      player.spriteFrameY * cropHeight,
       cropWidth,
       cropHeight,
       ...destinationData
@@ -309,6 +334,7 @@ const App = () => {
   /////////////////////////////////////////////////////////////////////////////
   // ENCAPSULATOR:
   /////////////////////////////////////////////////////////////////////////////
+
   const update = () => {
     move();
     advanceSpriteAnimation();
