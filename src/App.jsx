@@ -82,6 +82,8 @@ const App = () => {
     // sprite animation frame
     spriteFrameX: 0,
     spriteFrameY: 0,
+    spriteAnimationStep: 100, // in ms
+    spriteLastUpdateTime: 0, // in ms
   });
 
   // various:
@@ -250,6 +252,11 @@ const App = () => {
   };
 
   const advanceSpriteAnimation = () => {
+    const timeSinceLastSpriteUpdate =
+      now.current - playerData.current.spriteLastUpdateTime;
+    if (timeSinceLastSpriteUpdate < playerData.current.spriteAnimationStep)
+      return;
+
     const heldDirection = directionsHeld.current[0] || ""; // "" is to avoid undefined key
 
     const directionFrame = {
@@ -263,6 +270,7 @@ const App = () => {
         ...playerData.current,
         spriteFrameX: (playerData.current.spriteFrameX + 1) % 4,
         spriteFrameY: directionFrame[heldDirection],
+        spriteLastUpdateTime: now.current,
       };
   };
 
@@ -311,13 +319,13 @@ const App = () => {
     // ctx.fillRect(player.x, player.y, player.width, player.height);
 
     // draw player hitbox:
-    ctx.fillStyle = "red";
-    ctx.fillRect(
-      player.x + player.hitboxX,
-      player.y + player.hitboxY,
-      player.hitboxWidth,
-      player.hitboxHeight
-    );
+    // ctx.fillStyle = "red";
+    // ctx.fillRect(
+    //   player.x + player.hitboxX,
+    //   player.y + player.hitboxY,
+    //   player.hitboxWidth,
+    //   player.hitboxHeight
+    // );
 
     // draw sprite unchanged:
     // ctx.drawImage(
@@ -348,6 +356,11 @@ const App = () => {
 
   const update = () => {
     move();
+
+    // console.log(now.current - then.current);
+
+    // if (now.current - then.current > 9)
+
     advanceSpriteAnimation();
   };
 
