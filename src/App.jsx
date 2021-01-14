@@ -86,6 +86,10 @@ const App = () => {
     spriteLastUpdateTime: 0, // in ms
   });
 
+  const cursor = useRef({ x: 0, y: 0 });
+  const camera = useRef({ x: 0, y: 0 });
+  const rotation = useRef(0);
+
   // various:
   const [playWallHit] = useSound(wallHit, { volume: 0.15 });
   const playerSpriteImage = new Image();
@@ -150,7 +154,7 @@ const App = () => {
       -(map.maxY - canvas.height),
       map.minY
     );
-
+    camera.current = { x: camX, y: camY };
     // console.log("cam", camX, camY);
     ctx.translate(camX, camY);
   };
@@ -305,6 +309,14 @@ const App = () => {
     dataKeys.forEach((item, i) =>
       ctx.fillText(`${item}: ${player[item]}`, 10, 30 * (i + 1))
     );
+
+    // const canvasPosition = canvas.getBoundingClientRect();
+
+    // ctx.fillText(
+    //   `(x,y): ${canvasPosition.x}, ${canvasPosition.y}`,
+    //   10,
+    //   canvas.height - 40
+    // );
   };
 
   const drawPlayer = (ctx, canvas) => {
@@ -350,17 +362,84 @@ const App = () => {
     );
   };
 
+  const drawCharacterAim = (ctx, canvas) => {
+    const player = playerData.current;
+
+    ctx.fillStyle = "green";
+
+    // ctx.fillRect(player.x, player.y, 50, 50);
+
+    // console.log(cursor, cursor);
+    // console.log("cursor inside", cursor.current.x, cursor.current.y);
+
+    // ctx.lineTo(player.x + 30, player.y + 30);
+    const c = 1000;
+
+    // ctx.beginPath();
+    // ctx.moveTo(player.x + player.width / 2, player.y + player.height / 2);
+    // ctx.lineTo(cursor.current.x, cursor.current.y);
+    // ctx.lineWidth = 15;
+    // ctx.stroke();
+
+    // ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const cx = player.x + player.width / 2;
+    const cy = player.y + player.height / 2 + 20;
+
+    // ctx.save();
+    // ctx.translate(cx, cy);
+    // ctx.rotate(rotation.current + Math.PI);
+    // ctx.fillRect(0, 80, 20, 20);
+    // ctx.restore();
+
+    // ctx.save();
+    // ctx.translate(cx, cy);
+    // ctx.rotate(rotation.current);
+    // ctx.fillRect(0, 80, 20, 20);
+    // ctx.restore();
+
+    const X = cursor.current.x - cx - camera.current.x;
+    const Y = cursor.current.y - cy - camera.current.y;
+
+    let angle = Math.atan(Y / X);
+    if (X < 0) angle += Math.PI;
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    // ctx.fillRect(0, 0, 20, 20);
+
+    // ctx.rotate(rotation.current);
+    ctx.rotate(angle);
+    // ctx.rotate(Math.PI / 3);
+    // ctx.rotate(0);
+    ctx.fillRect(50, 0, 1500, 2);
+    ctx.restore();
+
+    ctx.font = "30px Arial";
+    ctx.fillStyle = "green";
+
+    ctx.fillText(
+      `(cx,cy): ${cursor.current.x}, ${cursor.current.y}`,
+      10,
+      canvas.height - 60
+    );
+
+    ctx.fillText(
+      `angle: ${angle} ${(angle * 180) / Math.PI}`,
+      10,
+      canvas.height - 30
+    );
+
+    ctx.fillText(`(CX, CY): ${X} ${Y}`, 10, canvas.height - 0);
+    // rotation.current += Math.PI / 180;
+  };
+
   /////////////////////////////////////////////////////////////////////////////
   // ENCAPSULATOR:
   /////////////////////////////////////////////////////////////////////////////
 
   const update = () => {
     move();
-
-    // console.log(now.current - then.current);
-
-    // if (now.current - then.current > 9)
-
     advanceSpriteAnimation();
   };
 
@@ -378,6 +457,7 @@ const App = () => {
     // drawings at depend on the camera panning go here:
     panCam(ctx, canvas);
     drawMap(ctx, canvas);
+    drawCharacterAim(ctx, canvas);
     drawPlayer(ctx, canvas);
 
     // absolutely positioned drawings must be called after resetCam();
@@ -407,6 +487,14 @@ const App = () => {
         ref={canvasRef}
         width={windowWidth}
         height={windowHeight}
+        onClick={(e) => {
+          console.log("canvas", e.offsetX);
+        }}
+        onMouseMove={(e) => {
+          // canvasRef.current.getBoundingClientRect();
+          cursor.current = { ...cursor.current, x: e.clientX, y: e.clientY };
+          // console.log("canvas move", cursor.current);
+        }}
       ></canvas>
     </GameContainer>
   );
