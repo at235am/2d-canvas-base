@@ -44,6 +44,8 @@ const GameContainer = styled.div`
     width: 100%;
     height: 100%;
     image-rendering: pixelated;
+
+    /* cursor: none; */
   }
 `;
 
@@ -300,14 +302,14 @@ const App = () => {
   };
 
   const drawPlayerState = (ctx, canvas) => {
-    ctx.font = "30px Arial";
+    ctx.font = "12px Arial";
     ctx.fillStyle = "green";
 
     const player = playerData.current;
     const dataKeys = Object.keys(player);
 
     dataKeys.forEach((item, i) =>
-      ctx.fillText(`${item}: ${player[item]}`, 10, 30 * (i + 1))
+      ctx.fillText(`${item}: ${player[item]}`, 10, 15 * (i + 1))
     );
 
     // const canvasPosition = canvas.getBoundingClientRect();
@@ -412,11 +414,12 @@ const App = () => {
     ctx.rotate(angle);
     // ctx.rotate(Math.PI / 3);
     // ctx.rotate(0);
+    ctx.fillStyle = "#008af9";
+
     ctx.fillRect(50, 0, 1500, 2);
     ctx.restore();
 
-    ctx.font = "30px Arial";
-    ctx.fillStyle = "green";
+    ctx.font = "12px Arial";
 
     ctx.fillText(
       `(cx,cy): ${cursor.current.x}, ${cursor.current.y}`,
